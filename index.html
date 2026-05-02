@@ -850,15 +850,8 @@
         });
       });
 
-      els.viewer.addEventListener("click", (event) => {
-        const width = window.innerWidth;
-        if (event.clientX < width * 0.23) {
-          prevEpisode();
-        } else if (event.clientX > width * 0.77) {
-          nextEpisode();
-        } else {
-          toggleControls();
-        }
+      els.viewer.addEventListener("click", () => {
+        toggleControls();
       });
 
       window.addEventListener("scroll", () => {
