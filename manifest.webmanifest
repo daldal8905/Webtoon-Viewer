@@ -1,0 +1,10 @@
+{
+  "name": "웹툰 뷰어",
+  "short_name": "웹툰 뷰어",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#121212",
+  "theme_color": "#121212",
+  "orientation": "portrait",
+  "description": "iPhone에서 오프라인으로 보는 웹툰 뷰어"
+}

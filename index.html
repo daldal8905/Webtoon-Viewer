@@ -1,0 +1,812 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#121212">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="웹툰 뷰어">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="manifest" href="manifest.webmanifest">
+  <title>웹툰 뷰어</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #121212;
+      --panel: #1c1c1c;
+      --panel-strong: #252525;
+      --text: #f2f2f2;
+      --muted: #aaa;
+      --line: #333;
+      --accent: #5fb3ff;
+      --safe-top: env(safe-area-inset-top, 0px);
+      --safe-bottom: env(safe-area-inset-bottom, 0px);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      width: 100%;
+      min-height: 100%;
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    body {
+      overflow-x: hidden;
+    }
+
+    button,
+    input {
+      font: inherit;
+    }
+
+    button {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel-strong);
+      color: var(--text);
+      min-height: 40px;
+      padding: 0 12px;
+    }
+
+    button:disabled {
+      color: #666;
+      opacity: 0.6;
+    }
+
+    .app-header {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      gap: 8px;
+      align-items: center;
+      min-height: calc(56px + var(--safe-top));
+      padding: calc(8px + var(--safe-top)) 10px 8px;
+      background: rgba(18, 18, 18, 0.96);
+      border-bottom: 1px solid var(--line);
+      backdrop-filter: blur(14px);
+    }
+
+    .title {
+      min-width: 0;
+      font-size: 14px;
+      line-height: 1.25;
+    }
+
+    .title strong,
+    .title span {
+      display: block;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .title span {
+      color: var(--muted);
+      font-size: 12px;
+      margin-top: 2px;
+    }
+
+    .library-panel {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 30;
+      background: var(--bg);
+      overflow: auto;
+      padding: calc(12px + var(--safe-top)) 12px calc(24px + var(--safe-bottom));
+    }
+
+    .library-panel.open {
+      display: block;
+    }
+
+    .panel-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    .panel-head h1 {
+      margin: 0;
+      font-size: 20px;
+      letter-spacing: 0;
+    }
+
+    .import-box {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      padding: 12px;
+      margin-bottom: 12px;
+    }
+
+    .import-box p {
+      margin: 0 0 10px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .file-input {
+      width: 100%;
+      min-height: 44px;
+      color: var(--text);
+    }
+
+    .list-title {
+      margin: 18px 0 8px;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .list {
+      display: grid;
+      gap: 8px;
+    }
+
+    .row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 10px;
+      align-items: center;
+      width: 100%;
+      min-height: 48px;
+      padding: 10px 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      text-align: left;
+    }
+
+    .row.active {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 2px rgba(95, 179, 255, 0.28);
+      background: #203040;
+    }
+
+    .row-name {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .row-meta {
+      color: var(--muted);
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    .viewer {
+      width: 100%;
+      min-height: calc(100vh - 56px - var(--safe-top));
+      background: #0f0f0f;
+    }
+
+    .empty {
+      display: grid;
+      place-items: center;
+      min-height: calc(100vh - 56px - var(--safe-top));
+      padding: 32px 22px;
+      color: var(--muted);
+      text-align: center;
+      line-height: 1.5;
+    }
+
+    .image-strip {
+      width: 100%;
+      max-width: 430px;
+      min-height: calc(100vh - 56px - var(--safe-top));
+      margin: 0 auto;
+      background: #1a1a1a;
+    }
+
+    .cut {
+      display: block;
+      width: 100%;
+      height: auto;
+      margin: 0;
+      background: #202020;
+    }
+
+    .bottom-controls {
+      position: fixed;
+      left: 50%;
+      bottom: calc(14px + var(--safe-bottom));
+      z-index: 25;
+      display: none;
+      transform: translateX(-50%);
+      grid-template-columns: auto auto auto;
+      gap: 8px;
+      padding: 8px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(28, 28, 28, 0.96);
+      box-shadow: 0 12px 36px rgba(0, 0, 0, 0.35);
+    }
+
+    .bottom-controls.open {
+      display: grid;
+    }
+
+    .toast {
+      position: fixed;
+      left: 12px;
+      right: 12px;
+      bottom: calc(80px + var(--safe-bottom));
+      z-index: 40;
+      display: none;
+      padding: 10px 12px;
+      border-radius: 8px;
+      background: #2b2b2b;
+      color: var(--text);
+      font-size: 13px;
+      text-align: center;
+    }
+
+    .toast.open {
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <header class="app-header">
+    <button id="libraryButton" type="button">목록</button>
+    <div class="title">
+      <strong id="mainTitle">웹툰 뷰어</strong>
+      <span id="subTitle">iPhone 폴더를 가져오세요</span>
+    </div>
+    <button id="loadButton" type="button">가져오기</button>
+  </header>
+
+  <aside id="libraryPanel" class="library-panel" aria-label="목록">
+    <div class="panel-head">
+      <h1>목록</h1>
+      <button id="closePanelButton" type="button">닫기</button>
+    </div>
+
+    <section class="import-box">
+      <p>가져온 이미지는 iPhone 내부 브라우저 저장소에 보관합니다. 다음에 앱을 열어도 목록을 기억합니다.</p>
+      <input id="folderInput" class="file-input" type="file" accept="image/png,image/jpeg,image/webp" webkitdirectory directory multiple>
+      <p id="loadStatus"></p>
+    </section>
+
+    <div class="list-title">작품</div>
+    <div id="webtoonList" class="list"></div>
+
+    <div class="list-title">회차</div>
+    <div id="episodeList" class="list"></div>
+  </aside>
+
+  <main id="viewer" class="viewer">
+    <div class="empty">가져오기를 눌러 iPhone의 웹툰 폴더를 선택하세요.</div>
+  </main>
+
+  <nav id="bottomControls" class="bottom-controls" aria-label="회차 이동">
+    <button id="prevButton" type="button">이전화</button>
+    <button id="episodesButton" type="button">회차</button>
+    <button id="nextButton" type="button">다음화</button>
+  </nav>
+
+  <div id="toast" class="toast" role="status"></div>
+
+  <script>
+    const DB_NAME = "webtoon-offline-viewer";
+    const DB_VERSION = 1;
+    const IMAGE_EXTENSIONS = [".png", ".jpg", ".jpeg", ".webp"];
+
+    const state = {
+      db: null,
+      library: null,
+      currentWebtoonIndex: -1,
+      currentEpisodeIndex: -1,
+      objectUrls: [],
+      controlsTimer: null,
+      positionTimer: null
+    };
+
+    const els = {
+      libraryButton: document.getElementById("libraryButton"),
+      loadButton: document.getElementById("loadButton"),
+      closePanelButton: document.getElementById("closePanelButton"),
+      libraryPanel: document.getElementById("libraryPanel"),
+      folderInput: document.getElementById("folderInput"),
+      loadStatus: document.getElementById("loadStatus"),
+      webtoonList: document.getElementById("webtoonList"),
+      episodeList: document.getElementById("episodeList"),
+      mainTitle: document.getElementById("mainTitle"),
+      subTitle: document.getElementById("subTitle"),
+      viewer: document.getElementById("viewer"),
+      bottomControls: document.getElementById("bottomControls"),
+      prevButton: document.getElementById("prevButton"),
+      episodesButton: document.getElementById("episodesButton"),
+      nextButton: document.getElementById("nextButton"),
+      toast: document.getElementById("toast")
+    };
+
+    function naturalCompare(a, b) {
+      return a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
+    }
+
+    function isImageFile(name) {
+      const lower = name.toLowerCase();
+      return IMAGE_EXTENSIONS.some((ext) => lower.endsWith(ext));
+    }
+
+    function normalizePath(file) {
+      return file.webkitRelativePath || file.name;
+    }
+
+    function openDb() {
+      return new Promise((resolve, reject) => {
+        const request = indexedDB.open(DB_NAME, DB_VERSION);
+        request.onupgradeneeded = () => {
+          const db = request.result;
+          if (!db.objectStoreNames.contains("meta")) {
+            db.createObjectStore("meta", { keyPath: "id" });
+          }
+          if (!db.objectStoreNames.contains("images")) {
+            db.createObjectStore("images", { keyPath: "id" });
+          }
+        };
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+    }
+
+    function transaction(storeNames, mode = "readonly") {
+      return state.db.transaction(storeNames, mode);
+    }
+
+    function getValue(storeName, key) {
+      return new Promise((resolve, reject) => {
+        const request = transaction(storeName).objectStore(storeName).get(key);
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+    }
+
+    function putValue(storeName, value) {
+      return new Promise((resolve, reject) => {
+        const request = transaction(storeName, "readwrite").objectStore(storeName).put(value);
+        request.onsuccess = () => resolve();
+        request.onerror = () => reject(request.error);
+      });
+    }
+
+    function clearStore(storeName) {
+      return new Promise((resolve, reject) => {
+        const request = transaction(storeName, "readwrite").objectStore(storeName).clear();
+        request.onsuccess = () => resolve();
+        request.onerror = () => reject(request.error);
+      });
+    }
+
+    function buildLibrary(files) {
+      const imageFiles = Array.from(files).filter((file) => isImageFile(file.name));
+      const rootName = imageFiles[0] ? normalizePath(imageFiles[0]).split("/")[0] : "웹툰 보관함";
+      const folderMap = new Map();
+
+      for (const file of imageFiles) {
+        const parts = normalizePath(file).split("/").filter(Boolean);
+        const fileName = parts.pop();
+        const folder = parts.join("/") || rootName;
+        if (!folderMap.has(folder)) {
+          folderMap.set(folder, []);
+        }
+        folderMap.get(folder).push({ file, name: fileName, path: `${folder}/${fileName}` });
+      }
+
+      const folderNames = Array.from(folderMap.keys()).sort(naturalCompare);
+      const hasNestedEpisodes = folderNames.some((name) => name.split("/").length >= 3);
+      const webtoonMap = new Map();
+
+      for (const folder of folderNames) {
+        const parts = folder.split("/");
+        let webtoonName;
+        let episodeName;
+        if (hasNestedEpisodes && parts.length >= 3) {
+          webtoonName = parts.slice(1, -1).join("/");
+          episodeName = parts[parts.length - 1];
+        } else if (parts.length >= 2) {
+          webtoonName = parts[0] === rootName && parts.length > 2 ? parts.slice(1, -1).join("/") : rootName;
+          episodeName = parts[parts.length - 1];
+        } else {
+          webtoonName = rootName;
+          episodeName = folder;
+        }
+
+        if (!webtoonMap.has(webtoonName)) {
+          webtoonMap.set(webtoonName, []);
+        }
+
+        const cuts = folderMap.get(folder)
+          .sort((a, b) => naturalCompare(a.name, b.name))
+          .map((item) => ({ name: item.name, path: item.path, file: item.file }));
+        webtoonMap.get(webtoonName).push({ name: episodeName, folder, cuts });
+      }
+
+      return {
+        libraryId: `library-${Date.now()}`,
+        name: rootName,
+        importedAt: new Date().toISOString(),
+        webtoons: Array.from(webtoonMap.entries())
+          .sort((a, b) => naturalCompare(a[0], b[0]))
+          .map(([name, episodes]) => ({
+            name,
+            episodes: episodes.sort((a, b) => naturalCompare(a.name, b.name))
+          }))
+      };
+    }
+
+    function waitForTransaction(tx) {
+      return new Promise((resolve, reject) => {
+        tx.oncomplete = resolve;
+        tx.onerror = () => reject(tx.error);
+        tx.onabort = () => reject(tx.error || new Error("저장 작업이 중단되었습니다."));
+      });
+    }
+
+    async function putImageRecords(records, onProgress) {
+      const batchSize = 8;
+      let saved = 0;
+
+      for (let start = 0; start < records.length; start += batchSize) {
+        const batch = records.slice(start, start + batchSize);
+        const writeTx = transaction(["images"], "readwrite");
+        const imageStore = writeTx.objectStore("images");
+
+        for (const record of batch) {
+          imageStore.put(record);
+        }
+
+        await waitForTransaction(writeTx);
+        saved += batch.length;
+        onProgress(saved);
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      }
+    }
+
+    function formatBytes(bytes) {
+      if (bytes >= 1024 * 1024 * 1024) {
+        return `${(bytes / 1024 / 1024 / 1024).toFixed(1)}GB`;
+      }
+      return `${(bytes / 1024 / 1024).toFixed(0)}MB`;
+    }
+
+    async function saveImportedFiles(files) {
+      const library = buildLibrary(files);
+      if (!library.webtoons.length) {
+        showToast("이미지 파일을 찾지 못했습니다.");
+        return;
+      }
+
+      const records = [];
+      let totalBytes = 0;
+      for (const webtoon of library.webtoons) {
+        for (const episode of webtoon.episodes) {
+          for (const cut of episode.cuts) {
+            records.push({ id: `${library.libraryId}:${cut.path}`, blob: cut.file, type: cut.file.type });
+            totalBytes += cut.file.size || 0;
+            delete cut.file;
+          }
+        }
+      }
+
+      if (navigator.storage?.persist) {
+        navigator.storage.persist().catch(() => {});
+      }
+
+      els.loadStatus.textContent = `저장 준비 중... ${formatBytes(totalBytes)}`;
+
+      try {
+        await clearStore("images");
+        await putImageRecords(records, (saved) => {
+          els.loadStatus.textContent = `저장 중... ${Math.round((saved / records.length) * 100)}% (${formatBytes(totalBytes)})`;
+        });
+      } catch (error) {
+        console.error(error);
+        if (error?.name === "QuotaExceededError") {
+          els.loadStatus.textContent = `저장 공간이 부족합니다. 전체 용량: ${formatBytes(totalBytes)}`;
+          showToast("iPhone 저장 공간이 부족합니다.");
+        } else {
+          els.loadStatus.textContent = "저장 중 오류가 발생했습니다. 폴더를 나누어 다시 가져오세요.";
+          showToast("저장이 중단되었습니다.");
+        }
+        return;
+      }
+
+      await putValue("meta", { id: "library", ...library });
+      state.library = library;
+      state.currentWebtoonIndex = 0;
+      state.currentEpisodeIndex = -1;
+      localStorage.setItem("lastWebtoonIndex", "0");
+      localStorage.removeItem("lastEpisodeIndex");
+      clearObjectUrls();
+      els.viewer.innerHTML = '<div class="empty">목록에서 회차를 선택하세요.</div>';
+      els.mainTitle.textContent = library.name;
+      els.subTitle.textContent = "저장됨";
+      els.loadStatus.textContent = "iPhone 내부 저장소에 저장했습니다.";
+      updateNavButtons();
+      renderLists();
+      showToast("가져오기가 끝났습니다.");
+    }
+
+    function clearObjectUrls() {
+      for (const url of state.objectUrls) {
+        URL.revokeObjectURL(url);
+      }
+      state.objectUrls = [];
+    }
+
+    function getCurrentWebtoon() {
+      return state.library?.webtoons[state.currentWebtoonIndex] || null;
+    }
+
+    function getCurrentEpisode() {
+      return getCurrentWebtoon()?.episodes[state.currentEpisodeIndex] || null;
+    }
+
+    function positionKey(webtoonIndex, episodeIndex) {
+      const episode = state.library?.webtoons[webtoonIndex]?.episodes[episodeIndex];
+      return episode ? `position:${episode.folder}` : "";
+    }
+
+    function savePosition() {
+      const key = positionKey(state.currentWebtoonIndex, state.currentEpisodeIndex);
+      if (!key) {
+        return;
+      }
+      const max = Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
+      localStorage.setItem(key, String(window.scrollY / max));
+    }
+
+    function restorePosition(webtoonIndex, episodeIndex) {
+      const key = positionKey(webtoonIndex, episodeIndex);
+      const ratio = Number(localStorage.getItem(key) || "0");
+      window.scrollTo(0, Math.max(0, document.documentElement.scrollHeight - window.innerHeight) * ratio);
+    }
+
+    function renderLists() {
+      els.webtoonList.innerHTML = "";
+      els.episodeList.innerHTML = "";
+      if (!state.library) {
+        return;
+      }
+
+      state.library.webtoons.forEach((webtoon, index) => {
+        const row = document.createElement("button");
+        row.className = `row${index === state.currentWebtoonIndex ? " active" : ""}`;
+        row.type = "button";
+        if (index === state.currentWebtoonIndex) {
+          row.setAttribute("aria-current", "true");
+        }
+        row.innerHTML = `<span class="row-name">${escapeHtml(webtoon.name)}</span><span class="row-meta">${webtoon.episodes.length}화</span>`;
+        row.addEventListener("click", () => {
+          state.currentWebtoonIndex = index;
+          state.currentEpisodeIndex = -1;
+          localStorage.setItem("lastWebtoonIndex", String(index));
+          localStorage.removeItem("lastEpisodeIndex");
+          els.mainTitle.textContent = webtoon.name;
+          els.subTitle.textContent = "회차를 선택하세요";
+          els.viewer.innerHTML = '<div class="empty">목록에서 회차를 선택하세요.</div>';
+          updateNavButtons();
+          renderLists();
+        });
+        els.webtoonList.appendChild(row);
+      });
+
+      const webtoon = getCurrentWebtoon();
+      if (!webtoon) {
+        return;
+      }
+      webtoon.episodes.forEach((episode, index) => {
+        const row = document.createElement("button");
+        row.className = `row${index === state.currentEpisodeIndex ? " active" : ""}`;
+        row.type = "button";
+        if (index === state.currentEpisodeIndex) {
+          row.setAttribute("aria-current", "true");
+        }
+        row.innerHTML = `<span class="row-name">${escapeHtml(episode.name)}</span>`;
+        row.addEventListener("click", () => {
+          openEpisode(state.currentWebtoonIndex, index, true);
+          closeLibrary();
+        });
+        els.episodeList.appendChild(row);
+      });
+    }
+
+    async function getImageRecord(key) {
+      return getValue("images", key);
+    }
+
+    async function openEpisode(webtoonIndex, episodeIndex, restore) {
+      const webtoon = state.library?.webtoons[webtoonIndex];
+      const episode = webtoon?.episodes[episodeIndex];
+      if (!webtoon || !episode) {
+        return;
+      }
+
+      savePosition();
+      state.currentWebtoonIndex = webtoonIndex;
+      state.currentEpisodeIndex = episodeIndex;
+      localStorage.setItem("lastWebtoonIndex", String(webtoonIndex));
+      localStorage.setItem("lastEpisodeIndex", String(episodeIndex));
+      clearObjectUrls();
+      els.viewer.innerHTML = "";
+      const strip = document.createElement("div");
+      strip.className = "image-strip";
+      els.viewer.appendChild(strip);
+      els.mainTitle.textContent = webtoon.name;
+      els.subTitle.textContent = episode.name;
+      updateNavButtons();
+      hideControls();
+
+      for (const cut of episode.cuts) {
+        const record = await getImageRecord(`${state.library.libraryId}:${cut.path}`);
+        if (!record) {
+          continue;
+        }
+        const url = URL.createObjectURL(record.blob);
+        state.objectUrls.push(url);
+        const img = document.createElement("img");
+        img.className = "cut";
+        img.alt = cut.name;
+        img.loading = "eager";
+        img.src = url;
+        strip.appendChild(img);
+      }
+
+      if (!strip.children.length) {
+        els.viewer.innerHTML = '<div class="empty">저장된 이미지를 찾지 못했습니다. 폴더를 다시 가져오세요.</div>';
+      }
+
+      if (restore) {
+        setTimeout(() => restorePosition(webtoonIndex, episodeIndex), 120);
+      } else {
+        window.scrollTo(0, 0);
+      }
+      renderLists();
+    }
+
+    function updateNavButtons() {
+      const webtoon = getCurrentWebtoon();
+      const hasEpisode = Boolean(getCurrentEpisode());
+      els.prevButton.disabled = !hasEpisode || state.currentEpisodeIndex <= 0;
+      els.nextButton.disabled = !hasEpisode || !webtoon || state.currentEpisodeIndex >= webtoon.episodes.length - 1;
+    }
+
+    function prevEpisode() {
+      if (state.currentEpisodeIndex > 0) {
+        openEpisode(state.currentWebtoonIndex, state.currentEpisodeIndex - 1, false);
+      } else {
+        showToast("첫 화입니다.");
+      }
+    }
+
+    function nextEpisode() {
+      const webtoon = getCurrentWebtoon();
+      if (webtoon && state.currentEpisodeIndex < webtoon.episodes.length - 1) {
+        openEpisode(state.currentWebtoonIndex, state.currentEpisodeIndex + 1, false);
+      } else {
+        showToast("마지막 화입니다.");
+      }
+    }
+
+    function showControls() {
+      els.bottomControls.classList.add("open");
+      clearTimeout(state.controlsTimer);
+      state.controlsTimer = setTimeout(hideControls, 3500);
+    }
+
+    function hideControls() {
+      els.bottomControls.classList.remove("open");
+      clearTimeout(state.controlsTimer);
+    }
+
+    function toggleControls() {
+      if (!getCurrentEpisode()) {
+        return;
+      }
+      if (els.bottomControls.classList.contains("open")) {
+        hideControls();
+      } else {
+        showControls();
+      }
+    }
+
+    function openLibrary() {
+      els.libraryPanel.classList.add("open");
+    }
+
+    function closeLibrary() {
+      els.libraryPanel.classList.remove("open");
+    }
+
+    function showToast(message) {
+      els.toast.textContent = message;
+      els.toast.classList.add("open");
+      setTimeout(() => els.toast.classList.remove("open"), 1800);
+    }
+
+    function escapeHtml(value) {
+      return String(value).replace(/[&<>"']/g, (char) => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#039;"
+      }[char]));
+    }
+
+    function bindEvents() {
+      els.libraryButton.addEventListener("click", openLibrary);
+      els.loadButton.addEventListener("click", () => els.folderInput.click());
+      els.closePanelButton.addEventListener("click", closeLibrary);
+      els.episodesButton.addEventListener("click", openLibrary);
+      els.prevButton.addEventListener("click", prevEpisode);
+      els.nextButton.addEventListener("click", nextEpisode);
+      els.folderInput.addEventListener("change", (event) => {
+        saveImportedFiles(event.target.files).catch((error) => {
+          console.error(error);
+          showToast("가져오기에 실패했습니다.");
+        });
+      });
+
+      els.viewer.addEventListener("click", (event) => {
+        const width = window.innerWidth;
+        if (event.clientX < width * 0.23) {
+          prevEpisode();
+        } else if (event.clientX > width * 0.77) {
+          nextEpisode();
+        } else {
+          toggleControls();
+        }
+      });
+
+      window.addEventListener("scroll", () => {
+        clearTimeout(state.positionTimer);
+        state.positionTimer = setTimeout(savePosition, 120);
+      }, { passive: true });
+      window.addEventListener("beforeunload", savePosition);
+    }
+
+    async function boot() {
+      state.db = await openDb();
+      state.library = await getValue("meta", "library");
+      if (state.library?.webtoons?.length) {
+        const savedWebtoon = Number(localStorage.getItem("lastWebtoonIndex") || "0");
+        state.currentWebtoonIndex = Math.min(Math.max(savedWebtoon, 0), state.library.webtoons.length - 1);
+        state.currentEpisodeIndex = -1;
+        els.mainTitle.textContent = state.library.webtoons[state.currentWebtoonIndex].name;
+        els.subTitle.textContent = "회차를 선택하세요";
+        els.viewer.innerHTML = '<div class="empty">목록에서 회차를 선택하세요.</div>';
+      }
+
+      bindEvents();
+      renderLists();
+      updateNavButtons();
+      if ("serviceWorker" in navigator) {
+        navigator.serviceWorker.register("service-worker.js").catch(() => {});
+      }
+      openLibrary();
+    }
+
+    boot().catch((error) => {
+      console.error(error);
+      els.viewer.innerHTML = '<div class="empty">앱을 시작하지 못했습니다. Safari 저장소 사용 권한을 확인하세요.</div>';
+    });
+  </script>
+</body>
+</html>
