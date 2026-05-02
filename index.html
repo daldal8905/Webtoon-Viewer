@@ -393,6 +393,14 @@
       });
     }
 
+    function getAllKeys(storeName) {
+      return new Promise((resolve, reject) => {
+        const request = transaction(storeName).objectStore(storeName).getAllKeys();
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+    }
+
     function buildLibrary(files) {
       const imageFiles = Array.from(files).filter((file) => isImageFile(file.name));
       const rootName = imageFiles[0] ? normalizePath(imageFiles[0]).split("/")[0] : "웹툰 보관함";
@@ -450,6 +458,54 @@
       };
     }
 
+    function mergeLibraries(previousLibrary, incomingLibrary) {
+      if (!previousLibrary?.webtoons?.length) {
+        return incomingLibrary;
+      }
+
+      const merged = {
+        ...incomingLibrary,
+        name: incomingLibrary.name || previousLibrary.name,
+        libraryId: previousLibrary.libraryId || incomingLibrary.libraryId,
+        webtoons: previousLibrary.webtoons.map((webtoon) => ({
+          ...webtoon,
+          episodes: webtoon.episodes.map((episode) => ({
+            ...episode,
+            cuts: episode.cuts.map((cut) => ({ ...cut }))
+          }))
+        }))
+      };
+
+      for (const incomingWebtoon of incomingLibrary.webtoons) {
+        let targetWebtoon = merged.webtoons.find((webtoon) => webtoon.name === incomingWebtoon.name);
+        if (!targetWebtoon) {
+          merged.webtoons.push(incomingWebtoon);
+          continue;
+        }
+
+        for (const incomingEpisode of incomingWebtoon.episodes) {
+          let targetEpisode = targetWebtoon.episodes.find((episode) => episode.folder === incomingEpisode.folder);
+          if (!targetEpisode) {
+            targetWebtoon.episodes.push(incomingEpisode);
+            continue;
+          }
+
+          const existingCutPaths = new Set(targetEpisode.cuts.map((cut) => cut.path));
+          for (const incomingCut of incomingEpisode.cuts) {
+            if (!existingCutPaths.has(incomingCut.path)) {
+              targetEpisode.cuts.push(incomingCut);
+            }
+          }
+          targetEpisode.cuts.sort((a, b) => naturalCompare(a.name, b.name));
+        }
+
+        targetWebtoon.episodes.sort((a, b) => naturalCompare(a.name, b.name));
+      }
+
+      merged.webtoons.sort((a, b) => naturalCompare(a.name, b.name));
+      return merged;
+    }
+
     function waitForTransaction(tx) {
       return new Promise((resolve, reject) => {
         tx.oncomplete = resolve;
@@ -486,32 +542,60 @@
     }
 
     async function saveImportedFiles(files) {
-      const library = buildLibrary(files);
-      if (!library.webtoons.length) {
+      const incomingLibrary = buildLibrary(files);
+      if (!incomingLibrary.webtoons.length) {
         showToast("이미지 파일을 찾지 못했습니다.");
         return;
       }
 
+      const previousLibrary = state.library || await getValue("meta", "library");
+      incomingLibrary.libraryId = previousLibrary?.libraryId || incomingLibrary.libraryId;
       const records = [];
+      const existingKeys = new Set(await getAllKeys("images"));
       let totalBytes = 0;
-      for (const webtoon of library.webtoons) {
+      let skippedCount = 0;
+      for (const webtoon of incomingLibrary.webtoons) {
         for (const episode of webtoon.episodes) {
           for (const cut of episode.cuts) {
-            records.push({ id: `${library.libraryId}:${cut.path}`, blob: cut.file, type: cut.file.type });
-            totalBytes += cut.file.size || 0;
+            const id = `${incomingLibrary.libraryId}:${cut.path}`;
+            if (existingKeys.has(id)) {
+              skippedCount += 1;
+            } else {
+              records.push({ id, blob: cut.file, type: cut.file.type });
+              totalBytes += cut.file.size || 0;
+            }
             delete cut.file;
           }
         }
       }
 
+      const library = mergeLibraries(previousLibrary, incomingLibrary);
+
       if (navigator.storage?.persist) {
         navigator.storage.persist().catch(() => {});
       }
 
-      els.loadStatus.textContent = `저장 준비 중... ${formatBytes(totalBytes)}`;
+      if (!records.length) {
+        await putValue("meta", { id: "library", ...library });
+        state.library = library;
+        state.currentWebtoonIndex = Math.min(Math.max(state.currentWebtoonIndex, 0), library.webtoons.length - 1);
+        state.currentEpisodeIndex = -1;
+        localStorage.setItem("lastWebtoonIndex", String(state.currentWebtoonIndex));
+        localStorage.removeItem("lastEpisodeIndex");
+        clearObjectUrls();
+        els.viewer.innerHTML = '<div class="empty">목록에서 회차를 선택하세요.</div>';
+        els.mainTitle.textContent = library.webtoons[state.currentWebtoonIndex]?.name || library.name;
+        els.subTitle.textContent = "새로 저장할 파일 없음";
+        els.loadStatus.textContent = "이미 저장된 파일은 건너뛰었습니다.";
+        updateNavButtons();
+        renderLists();
+        showToast("새 파일이 없습니다.");
+        return;
+      }
+
+      els.loadStatus.textContent = `새 파일 저장 준비 중... ${formatBytes(totalBytes)}`;
 
       try {
-        await clearStore("images");
         await putImageRecords(records, (saved) => {
           els.loadStatus.textContent = `저장 중... ${Math.round((saved / records.length) * 100)}% (${formatBytes(totalBytes)})`;
         });
@@ -537,7 +621,9 @@
       els.viewer.innerHTML = '<div class="empty">목록에서 회차를 선택하세요.</div>';
       els.mainTitle.textContent = library.name;
       els.subTitle.textContent = "저장됨";
-      els.loadStatus.textContent = "iPhone 내부 저장소에 저장했습니다.";
+      els.loadStatus.textContent = skippedCount
+        ? `새 파일만 저장했습니다. 이미 저장된 파일은 건너뛰었습니다.`
+        : "iPhone 내부 저장소에 저장했습니다.";
       updateNavButtons();
       renderLists();
       showToast("가져오기가 끝났습니다.");
