@@ -321,6 +321,7 @@
       library: null,
       currentWebtoonIndex: -1,
       currentEpisodeIndex: -1,
+      suspendPositionSave: false,
       objectUrls: [],
       controlsTimer: null,
       positionTimer: null
@@ -694,7 +695,7 @@
       return webtoon.episodes.findIndex((episode) => episode.folder === saved.episodeFolder);
     }
 
-    function rememberWebtoonPosition(webtoonIndex, episodeIndex, ratio) {
+    function rememberWebtoonPosition(webtoonIndex, episodeIndex, value, maximum) {
       const key = webtoonPositionKey(webtoonIndex);
       const episode = state.library?.webtoons[webtoonIndex]?.episodes[episodeIndex];
       if (!key || !episode) {
@@ -702,23 +703,80 @@
       }
       localStorage.setItem(key, JSON.stringify({
         episodeFolder: episode.folder,
-        ratio
+        value,
+        maximum,
+        ratio: maximum <= 0 ? 0 : value / maximum
       }));
     }
 
     function savePosition() {
-      if (state.currentWebtoonIndex < 0 || state.currentEpisodeIndex < 0) {
+      if (state.suspendPositionSave || state.currentWebtoonIndex < 0 || state.currentEpisodeIndex < 0) {
         return;
       }
       const max = Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
-      rememberWebtoonPosition(state.currentWebtoonIndex, state.currentEpisodeIndex, window.scrollY / max);
+      rememberWebtoonPosition(state.currentWebtoonIndex, state.currentEpisodeIndex, window.scrollY, max);
     }
 
     function restorePosition(webtoonIndex, episodeIndex) {
       const episode = state.library?.webtoons[webtoonIndex]?.episodes[episodeIndex];
       const saved = getSavedWebtoonPosition(webtoonIndex);
-      const ratio = saved?.episodeFolder === episode?.folder ? Number(saved.ratio || 0) : 0;
-      window.scrollTo(0, Math.max(0, document.documentElement.scrollHeight - window.innerHeight) * ratio);
+      if (saved?.episodeFolder !== episode?.folder) {
+        window.scrollTo(0, 0);
+        return;
+      }
+
+      const max = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
+      const savedMaximum = Number(saved.maximum || 0);
+      const savedValue = Number(saved.value || 0);
+      const savedRatio = Number(saved.ratio || 0);
+      const maxChanged = savedMaximum > 0 && Math.abs(max - savedMaximum) / savedMaximum > 0.1;
+      const target = maxChanged ? max * savedRatio : savedValue;
+      window.scrollTo(0, Math.min(Math.max(0, target), max));
+    }
+
+    function waitForImages(container, timeoutMs = 7000) {
+      const images = Array.from(container.querySelectorAll("img"));
+      if (!images.length) {
+        return Promise.resolve();
+      }
+
+      const imagePromises = images.map((image) => {
+        if (image.complete && image.naturalHeight > 0) {
+          return Promise.resolve();
+        }
+        return new Promise((resolve) => {
+          image.addEventListener("load", resolve, { once: true });
+          image.addEventListener("error", resolve, { once: true });
+        });
+      });
+
+      return Promise.race([
+        Promise.all(imagePromises),
+        new Promise((resolve) => setTimeout(resolve, timeoutMs))
+      ]);
+    }
+
+    function afterLayout() {
+      return new Promise((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(resolve));
+      });
+    }
+
+    async function finishEpisodePositioning(webtoonIndex, episodeIndex, restore, strip) {
+      if (restore) {
+        await waitForImages(strip);
+        await afterLayout();
+        restorePosition(webtoonIndex, episodeIndex);
+        await afterLayout();
+        restorePosition(webtoonIndex, episodeIndex);
+      } else {
+        window.scrollTo(0, 0);
+        rememberWebtoonPosition(webtoonIndex, episodeIndex, 0, Math.max(1, document.documentElement.scrollHeight - window.innerHeight));
+      }
+
+      els.viewer.style.visibility = "";
+      state.suspendPositionSave = false;
+      savePosition();
     }
 
     function updateDeleteButton() {
@@ -854,9 +912,11 @@
       localStorage.setItem("lastWebtoonIndex", String(webtoonIndex));
       localStorage.setItem("lastEpisodeIndex", String(episodeIndex));
       if (!restore || getSavedEpisodeIndex(webtoonIndex) !== episodeIndex) {
-        rememberWebtoonPosition(webtoonIndex, episodeIndex, 0);
+        rememberWebtoonPosition(webtoonIndex, episodeIndex, 0, 1);
       }
+      state.suspendPositionSave = true;
       clearObjectUrls();
+      els.viewer.style.visibility = restore ? "hidden" : "";
       els.viewer.innerHTML = "";
       const strip = document.createElement("div");
       strip.className = "image-strip";
@@ -883,13 +943,13 @@
 
       if (!strip.children.length) {
         els.viewer.innerHTML = '<div class="empty">저장된 이미지를 찾지 못했습니다. 폴더를 다시 가져오세요.</div>';
+        els.viewer.style.visibility = "";
+        state.suspendPositionSave = false;
+        renderLists();
+        return;
       }
 
-      if (restore) {
-        setTimeout(() => restorePosition(webtoonIndex, episodeIndex), 120);
-      } else {
-        window.scrollTo(0, 0);
-      }
+      await finishEpisodePositioning(webtoonIndex, episodeIndex, restore, strip);
       renderLists();
     }
 
