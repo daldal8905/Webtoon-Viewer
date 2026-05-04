@@ -322,6 +322,7 @@
       currentWebtoonIndex: -1,
       currentEpisodeIndex: -1,
       suspendPositionSave: false,
+      episodeOpenToken: 0,
       objectUrls: [],
       controlsTimer: null,
       positionTimer: null
@@ -478,9 +479,19 @@
           .sort((a, b) => naturalCompare(a[0], b[0]))
           .map(([name, episodes]) => ({
             name,
+            key: getWebtoonKey(name, episodes),
             episodes: episodes.sort((a, b) => naturalCompare(a.name, b.name))
           }))
       };
+    }
+
+    function getWebtoonKey(name, episodes) {
+      const firstFolder = episodes?.[0]?.folder || "";
+      const parts = firstFolder.split("/").filter(Boolean);
+      if (parts.length > 1) {
+        return parts.slice(0, -1).join("/");
+      }
+      return name;
     }
 
     function mergeLibraries(previousLibrary, incomingLibrary) {
@@ -494,6 +505,7 @@
         libraryId: previousLibrary.libraryId || incomingLibrary.libraryId,
         webtoons: previousLibrary.webtoons.map((webtoon) => ({
           ...webtoon,
+          key: webtoon.key || getWebtoonKey(webtoon.name, webtoon.episodes),
           episodes: webtoon.episodes.map((episode) => ({
             ...episode,
             cuts: episode.cuts.map((cut) => ({ ...cut }))
@@ -502,7 +514,10 @@
       };
 
       for (const incomingWebtoon of incomingLibrary.webtoons) {
-        let targetWebtoon = merged.webtoons.find((webtoon) => webtoon.name === incomingWebtoon.name);
+        incomingWebtoon.key = incomingWebtoon.key || getWebtoonKey(incomingWebtoon.name, incomingWebtoon.episodes);
+        let targetWebtoon = merged.webtoons.find((webtoon) => (
+          (webtoon.key || webtoon.name) === (incomingWebtoon.key || incomingWebtoon.name)
+        ));
         if (!targetWebtoon) {
           merged.webtoons.push(incomingWebtoon);
           continue;
@@ -671,7 +686,10 @@
 
     function webtoonPositionKey(webtoonIndex) {
       const webtoon = state.library?.webtoons[webtoonIndex];
-      return webtoon ? `webtoon-position:${webtoon.name}` : "";
+      if (!webtoon) {
+        return "";
+      }
+      return `webtoon-position:${state.library.libraryId}:${webtoon.key || webtoon.name}`;
     }
 
     function getSavedWebtoonPosition(webtoonIndex) {
@@ -680,7 +698,12 @@
         return null;
       }
       try {
-        return JSON.parse(localStorage.getItem(key) || "null");
+        const saved = JSON.parse(localStorage.getItem(key) || "null");
+        if (saved) {
+          return saved;
+        }
+        const webtoon = state.library?.webtoons[webtoonIndex];
+        return JSON.parse(localStorage.getItem(`webtoon-position:${webtoon?.name}`) || "null");
       } catch {
         return null;
       }
@@ -702,6 +725,7 @@
         return;
       }
       localStorage.setItem(key, JSON.stringify({
+        webtoonKey: state.library.webtoons[webtoonIndex].key || state.library.webtoons[webtoonIndex].name,
         episodeFolder: episode.folder,
         value,
         maximum,
@@ -762,12 +786,18 @@
       });
     }
 
-    async function finishEpisodePositioning(webtoonIndex, episodeIndex, restore, strip) {
+    async function finishEpisodePositioning(webtoonIndex, episodeIndex, restore, strip, openToken) {
       if (restore) {
         await waitForImages(strip);
+        if (openToken !== state.episodeOpenToken) {
+          return;
+        }
         await afterLayout();
         restorePosition(webtoonIndex, episodeIndex);
         await afterLayout();
+        if (openToken !== state.episodeOpenToken) {
+          return;
+        }
         restorePosition(webtoonIndex, episodeIndex);
       } else {
         window.scrollTo(0, 0);
@@ -857,6 +887,7 @@
         }
       }
       localStorage.removeItem(webtoonPositionKey(state.currentWebtoonIndex));
+      localStorage.removeItem(`webtoon-position:${webtoon.name}`);
 
       try {
         await deleteValues("images", keys);
@@ -900,6 +931,7 @@
     }
 
     async function openEpisode(webtoonIndex, episodeIndex, restore) {
+      const openToken = ++state.episodeOpenToken;
       const webtoon = state.library?.webtoons[webtoonIndex];
       const episode = webtoon?.episodes[episodeIndex];
       if (!webtoon || !episode) {
@@ -941,6 +973,10 @@
         strip.appendChild(img);
       }
 
+      if (openToken !== state.episodeOpenToken) {
+        return;
+      }
+
       if (!strip.children.length) {
         els.viewer.innerHTML = '<div class="empty">저장된 이미지를 찾지 못했습니다. 폴더를 다시 가져오세요.</div>';
         els.viewer.style.visibility = "";
@@ -949,7 +985,10 @@
         return;
       }
 
-      await finishEpisodePositioning(webtoonIndex, episodeIndex, restore, strip);
+      await finishEpisodePositioning(webtoonIndex, episodeIndex, restore, strip, openToken);
+      if (openToken !== state.episodeOpenToken) {
+        return;
+      }
       renderLists();
     }
 
