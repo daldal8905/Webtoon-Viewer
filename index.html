@@ -35,6 +35,8 @@
       background: var(--bg);
       color: var(--text);
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      touch-action: manipulation;
+      -webkit-text-size-adjust: 100%;
     }
 
     body {
@@ -359,7 +361,7 @@
       objectUrls: [],
       controlsTimer: null,
       positionTimer: null,
-      lastViewerTouchEnd: 0
+      lastTouchEnd: 0
     };
 
     const els = {
@@ -1276,7 +1278,24 @@
       });
     }
 
+    function blockDoubleTapZoom() {
+      document.addEventListener("dblclick", (event) => {
+        event.preventDefault();
+      }, { capture: true });
+      document.addEventListener("touchend", (event) => {
+        const now = Date.now();
+        if (now - state.lastTouchEnd < 360) {
+          event.preventDefault();
+        }
+        state.lastTouchEnd = now;
+      }, { capture: true, passive: false });
+      document.addEventListener("gesturestart", (event) => {
+        event.preventDefault();
+      });
+    }
+
     function bindEvents() {
+      blockDoubleTapZoom();
       els.libraryButton.addEventListener("click", openLibrary);
       els.loadButton.addEventListener("click", () => els.folderInput.click());
       els.closePanelButton.addEventListener("click", closeLibrary);
@@ -1302,13 +1321,6 @@
       els.viewer.addEventListener("dblclick", (event) => {
         event.preventDefault();
       });
-      els.viewer.addEventListener("touchend", (event) => {
-        const now = Date.now();
-        if (now - state.lastViewerTouchEnd < 320) {
-          event.preventDefault();
-        }
-        state.lastViewerTouchEnd = now;
-      }, { passive: false });
 
       window.addEventListener("scroll", () => {
         clearTimeout(state.positionTimer);
