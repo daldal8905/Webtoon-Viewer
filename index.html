@@ -145,7 +145,12 @@
     }
 
     .episode-sheet .panel-head {
+      position: sticky;
+      top: 0;
+      z-index: 1;
       margin-bottom: 10px;
+      padding-bottom: 10px;
+      background: rgba(28, 28, 28, 0.94);
     }
 
     .episode-sheet h1 {
@@ -1136,7 +1141,7 @@
         return;
       }
 
-      els.episodeOverlayTitle.textContent = `${webtoon.name} 회차`;
+      els.episodeOverlayTitle.textContent = `${webtoon.name} 의 회차`;
       webtoon.episodes.forEach((episode, index) => {
         const row = document.createElement("button");
         row.className = `row${index === state.currentEpisodeIndex ? " active" : ""}`;
