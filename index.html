@@ -267,10 +267,19 @@
       border-radius: 8px;
       background: rgba(28, 28, 28, 0.96);
       box-shadow: 0 12px 36px rgba(0, 0, 0, 0.35);
+      touch-action: manipulation;
+      -webkit-user-select: none;
+      user-select: none;
     }
 
     .bottom-controls.open {
       display: grid;
+    }
+
+    .bottom-controls button {
+      touch-action: manipulation;
+      -webkit-user-select: none;
+      user-select: none;
     }
 
     .toast {
@@ -1248,6 +1257,25 @@
       }[char]));
     }
 
+    function bindTouchButton(element, handler) {
+      let ignoreClickUntil = 0;
+      element.addEventListener("touchend", (event) => {
+        event.preventDefault();
+        ignoreClickUntil = Date.now() + 500;
+        handler();
+      }, { passive: false });
+      element.addEventListener("click", (event) => {
+        if (Date.now() < ignoreClickUntil) {
+          event.preventDefault();
+          return;
+        }
+        handler();
+      });
+      element.addEventListener("dblclick", (event) => {
+        event.preventDefault();
+      });
+    }
+
     function bindEvents() {
       els.libraryButton.addEventListener("click", openLibrary);
       els.loadButton.addEventListener("click", () => els.folderInput.click());
@@ -1258,9 +1286,9 @@
           showToast("작품 삭제에 실패했습니다.");
         });
       });
-      els.episodesButton.addEventListener("click", openLibrary);
-      els.prevButton.addEventListener("click", prevEpisode);
-      els.nextButton.addEventListener("click", nextEpisode);
+      bindTouchButton(els.episodesButton, openLibrary);
+      bindTouchButton(els.prevButton, prevEpisode);
+      bindTouchButton(els.nextButton, nextEpisode);
       els.folderInput.addEventListener("change", (event) => {
         saveImportedFiles(event.target.files).catch((error) => {
           console.error(error);
