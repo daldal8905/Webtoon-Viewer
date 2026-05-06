@@ -1100,7 +1100,7 @@
       return getValue("images", key);
     }
 
-    async function openEpisode(webtoonIndex, episodeIndex, restore) {
+    async function openEpisode(webtoonIndex, episodeIndex, restore, keepControlsOpen = false) {
       const openToken = ++state.episodeOpenToken;
       const webtoon = state.library?.webtoons[webtoonIndex];
       const episode = webtoon?.episodes[episodeIndex];
@@ -1126,7 +1126,11 @@
       els.mainTitle.textContent = webtoon.name;
       els.subTitle.textContent = episode.name;
       updateNavButtons();
-      hideControls();
+      if (keepControlsOpen) {
+        showControls();
+      } else {
+        hideControls();
+      }
 
       for (const cut of episode.cuts) {
         const record = await getImageRecord(`${state.library.libraryId}:${cut.path}`);
@@ -1171,7 +1175,7 @@
 
     function prevEpisode() {
       if (state.currentEpisodeIndex > 0) {
-        openEpisode(state.currentWebtoonIndex, state.currentEpisodeIndex - 1, false);
+        openEpisode(state.currentWebtoonIndex, state.currentEpisodeIndex - 1, false, true);
       } else {
         showToast("첫 화입니다.");
       }
@@ -1180,7 +1184,7 @@
     function nextEpisode() {
       const webtoon = getCurrentWebtoon();
       if (webtoon && state.currentEpisodeIndex < webtoon.episodes.length - 1) {
-        openEpisode(state.currentWebtoonIndex, state.currentEpisodeIndex + 1, false);
+        openEpisode(state.currentWebtoonIndex, state.currentEpisodeIndex + 1, false, true);
       } else {
         showToast("마지막 화입니다.");
       }
