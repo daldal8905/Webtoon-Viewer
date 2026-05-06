@@ -1127,7 +1127,7 @@
       els.subTitle.textContent = episode.name;
       updateNavButtons();
       if (keepControlsOpen) {
-        showControls();
+        showControls(false);
       } else {
         hideControls();
       }
@@ -1190,10 +1190,12 @@
       }
     }
 
-    function showControls() {
+    function showControls(autoHide = true) {
       els.bottomControls.classList.add("open");
       clearTimeout(state.controlsTimer);
-      state.controlsTimer = setTimeout(hideControls, 3500);
+      if (autoHide) {
+        state.controlsTimer = setTimeout(hideControls, 3500);
+      }
     }
 
     function hideControls() {
