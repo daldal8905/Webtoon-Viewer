@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <meta name="theme-color" content="#121212">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="웹툰 및 만화 뷰어">
@@ -217,6 +217,9 @@
       width: 100%;
       min-height: calc(100vh - 56px - var(--safe-top));
       background: #0f0f0f;
+      touch-action: manipulation;
+      -webkit-user-select: none;
+      user-select: none;
     }
 
     .empty {
@@ -235,6 +238,7 @@
       min-height: calc(100vh - 56px - var(--safe-top));
       margin: 0 auto;
       background: #1a1a1a;
+      touch-action: manipulation;
     }
 
     .cut {
@@ -243,6 +247,10 @@
       height: auto;
       margin: 0;
       background: #202020;
+      touch-action: manipulation;
+      -webkit-user-select: none;
+      user-select: none;
+      -webkit-user-drag: none;
     }
 
     .bottom-controls {
@@ -341,7 +349,8 @@
       episodeOpenToken: 0,
       objectUrls: [],
       controlsTimer: null,
-      positionTimer: null
+      positionTimer: null,
+      lastViewerTouchEnd: 0
     };
 
     const els = {
@@ -1262,6 +1271,16 @@
       els.viewer.addEventListener("click", () => {
         toggleControls();
       });
+      els.viewer.addEventListener("dblclick", (event) => {
+        event.preventDefault();
+      });
+      els.viewer.addEventListener("touchend", (event) => {
+        const now = Date.now();
+        if (now - state.lastViewerTouchEnd < 320) {
+          event.preventDefault();
+        }
+        state.lastViewerTouchEnd = now;
+      }, { passive: false });
 
       window.addEventListener("scroll", () => {
         clearTimeout(state.positionTimer);
