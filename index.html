@@ -149,6 +149,8 @@
 
     .episode-sheet .panel-head {
       flex: 0 0 auto;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 64px;
       margin-bottom: 10px;
       padding-bottom: 10px;
       background: rgba(28, 28, 28, 0.94);
@@ -158,6 +160,13 @@
       min-width: 0;
       overflow: hidden;
       text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .episode-sheet .panel-head button {
+      width: 64px;
+      min-width: 64px;
+      padding: 0;
       white-space: nowrap;
     }
 
