@@ -5,10 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#121212">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-title" content="웹툰 뷰어">
+  <meta name="apple-mobile-web-app-title" content="웹툰 및 만화 뷰어">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <link rel="manifest" href="manifest.webmanifest">
-  <title>웹툰 뷰어</title>
+  <title>웹툰 및 만화 뷰어</title>
   <style>
     :root {
       color-scheme: dark;
@@ -165,6 +165,22 @@
       gap: 8px;
     }
 
+    .group-title {
+      margin: 14px 0 6px;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .group-box {
+      display: grid;
+      gap: 8px;
+      padding: 8px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #181818;
+    }
+
     .row {
       display: grid;
       grid-template-columns: 1fr auto;
@@ -273,7 +289,7 @@
   <header class="app-header">
     <button id="libraryButton" type="button">목록</button>
     <div class="title">
-      <strong id="mainTitle">웹툰 뷰어</strong>
+      <strong id="mainTitle">웹툰 및 만화 뷰어</strong>
       <span id="subTitle">iPhone 폴더를 가져오세요</span>
     </div>
     <button id="loadButton" type="button">가져오기</button>
@@ -348,8 +364,122 @@
       toast: document.getElementById("toast")
     };
 
+    const CATEGORY_FOLDERS = [
+      { name: "웹툰", folders: ["웹툰", "웹툰 목록"] },
+      { name: "만화", folders: ["만화", "만화 목록"] }
+    ];
+
+    function normalizeText(value) {
+      return String(value || "").normalize("NFC").trim();
+    }
+
+    function normalizePathText(value) {
+      return normalizeText(value).replace(/\\/g, "/");
+    }
+
     function naturalCompare(a, b) {
-      return a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
+      const aParts = normalizeText(a).split(/(\d+(?:\.\d+)?)/).filter(Boolean);
+      const bParts = normalizeText(b).split(/(\d+(?:\.\d+)?)/).filter(Boolean);
+      const length = Math.max(aParts.length, bParts.length);
+
+      for (let index = 0; index < length; index += 1) {
+        if (index >= aParts.length) {
+          return -1;
+        }
+        if (index >= bParts.length) {
+          return 1;
+        }
+
+        const aPart = aParts[index];
+        const bPart = bParts[index];
+        const aNumber = /^\d+(?:\.\d+)?$/.test(aPart) ? Number(aPart) : null;
+        const bNumber = /^\d+(?:\.\d+)?$/.test(bPart) ? Number(bPart) : null;
+
+        if (aNumber !== null && bNumber !== null) {
+          if (aNumber !== bNumber) {
+            return aNumber - bNumber;
+          }
+          continue;
+        }
+
+        const result = aPart.localeCompare(bPart, undefined, { sensitivity: "base" });
+        if (result !== 0) {
+          return result;
+        }
+      }
+
+      return 0;
+    }
+
+    function getEpisodeNumber(name) {
+      const normalized = normalizeText(name);
+      const match = normalized.match(/(?:^|[^\d])(\d+(?:\.\d+)?)(?=\s*(?:화|회|편|$|[^\d]))/);
+      return match ? Number(match[1]) : null;
+    }
+
+    function compareEpisodes(a, b) {
+      const aNumber = getEpisodeNumber(a.name);
+      const bNumber = getEpisodeNumber(b.name);
+      if (aNumber !== null && bNumber !== null && aNumber !== bNumber) {
+        return aNumber - bNumber;
+      }
+      return naturalCompare(a.name, b.name);
+    }
+
+    function getCategoryName(folderName) {
+      const normalized = normalizeText(folderName);
+      const category = CATEGORY_FOLDERS.find((item) => item.folders.some((folder) => normalizeText(folder) === normalized));
+      return category ? category.name : null;
+    }
+
+    function cleanWebtoonName(name, category) {
+      const parts = normalizePathText(name).split("/").map((part) => normalizeText(part)).filter(Boolean);
+      let detectedCategory = category || null;
+
+      while (parts.length > 1) {
+        const partCategory = getCategoryName(parts[0]);
+        if (!partCategory) {
+          break;
+        }
+        detectedCategory = detectedCategory || partCategory;
+        parts.shift();
+      }
+
+      return {
+        name: parts.join("/") || normalizeText(name),
+        category: detectedCategory
+      };
+    }
+
+    function getCategoryOrder(categoryName) {
+      const index = CATEGORY_FOLDERS.findIndex((item) => item.name === categoryName);
+      return index < 0 ? CATEGORY_FOLDERS.length : index;
+    }
+
+    function compareWebtoons(a, b) {
+      const categoryDiff = getCategoryOrder(a.category) - getCategoryOrder(b.category);
+      if (categoryDiff !== 0) {
+        return categoryDiff;
+      }
+      return naturalCompare(a.name, b.name);
+    }
+
+    function sortLibrary(library) {
+      if (!library?.webtoons) {
+        return library;
+      }
+
+      for (const webtoon of library.webtoons) {
+        const cleaned = cleanWebtoonName(webtoon.name, webtoon.category);
+        webtoon.name = cleaned.name;
+        webtoon.category = cleaned.category || null;
+        webtoon.episodes.sort(compareEpisodes);
+        for (const episode of webtoon.episodes) {
+          episode.cuts.sort((a, b) => naturalCompare(a.name, b.name));
+        }
+      }
+      library.webtoons.sort(compareWebtoons);
+      return library;
     }
 
     function isImageFile(name) {
@@ -358,7 +488,7 @@
     }
 
     function normalizePath(file) {
-      return file.webkitRelativePath || file.name;
+      return normalizePathText(file.webkitRelativePath || file.name);
     }
 
     function openDb() {
@@ -430,10 +560,11 @@
     function buildLibrary(files) {
       const imageFiles = Array.from(files).filter((file) => isImageFile(file.name));
       const rootName = imageFiles[0] ? normalizePath(imageFiles[0]).split("/")[0] : "웹툰 보관함";
+      const rootCategory = getCategoryName(rootName);
       const folderMap = new Map();
 
       for (const file of imageFiles) {
-        const parts = normalizePath(file).split("/").filter(Boolean);
+        const parts = normalizePath(file).split("/").map((part) => normalizeText(part)).filter(Boolean);
         const fileName = parts.pop();
         const folder = parts.join("/") || rootName;
         if (!folderMap.has(folder)) {
@@ -443,44 +574,59 @@
       }
 
       const folderNames = Array.from(folderMap.keys()).sort(naturalCompare);
-      const hasNestedEpisodes = folderNames.some((name) => name.split("/").length >= 3);
       const webtoonMap = new Map();
 
       for (const folder of folderNames) {
-        const parts = folder.split("/");
-        let webtoonName;
-        let episodeName;
-        if (hasNestedEpisodes && parts.length >= 3) {
-          webtoonName = parts.slice(1, -1).join("/");
-          episodeName = parts[parts.length - 1];
-        } else if (parts.length >= 2) {
-          webtoonName = parts[0] === rootName && parts.length > 2 ? parts.slice(1, -1).join("/") : rootName;
-          episodeName = parts[parts.length - 1];
-        } else {
-          webtoonName = rootName;
-          episodeName = folder;
+        const parts = folder.split("/").map((part) => normalizeText(part)).filter(Boolean);
+        const relativeParts = parts[0] === rootName ? parts.slice(1) : [...parts];
+        let category = rootCategory;
+        if (relativeParts.length > 0) {
+          const nestedCategory = getCategoryName(relativeParts[0]);
+          if (nestedCategory) {
+            category = nestedCategory;
+            relativeParts.shift();
+          }
         }
 
-        if (!webtoonMap.has(webtoonName)) {
-          webtoonMap.set(webtoonName, []);
+        let webtoonName;
+        let episodeName;
+        if (relativeParts.length >= 2) {
+          webtoonName = relativeParts.slice(0, -1).join("/");
+          episodeName = relativeParts[relativeParts.length - 1];
+        } else if (relativeParts.length === 1) {
+          webtoonName = rootName;
+          episodeName = relativeParts[0];
+        } else {
+          webtoonName = rootName;
+          episodeName = parts[parts.length - 1] || folder;
+        }
+
+        const cleaned = cleanWebtoonName(webtoonName, category);
+        webtoonName = cleaned.name;
+        category = cleaned.category;
+
+        const webtoonKey = `${category || ""}:${webtoonName}`;
+        if (!webtoonMap.has(webtoonKey)) {
+          webtoonMap.set(webtoonKey, { name: webtoonName, category, episodes: [] });
         }
 
         const cuts = folderMap.get(folder)
           .sort((a, b) => naturalCompare(a.name, b.name))
           .map((item) => ({ name: item.name, path: item.path, file: item.file }));
-        webtoonMap.get(webtoonName).push({ name: episodeName, folder, cuts });
+        webtoonMap.get(webtoonKey).episodes.push({ name: episodeName, folder, cuts });
       }
 
       return {
         libraryId: `library-${Date.now()}`,
         name: rootName,
         importedAt: new Date().toISOString(),
-        webtoons: Array.from(webtoonMap.entries())
-          .sort((a, b) => naturalCompare(a[0], b[0]))
-          .map(([name, episodes]) => ({
-            name,
-            key: getWebtoonKey(name, episodes),
-            episodes: episodes.sort((a, b) => naturalCompare(a.name, b.name))
+        webtoons: Array.from(webtoonMap.values())
+          .sort(compareWebtoons)
+          .map((webtoon) => ({
+            name: webtoon.name,
+            category: webtoon.category,
+            key: getWebtoonKey(webtoon.name, webtoon.episodes),
+            episodes: webtoon.episodes.sort(compareEpisodes)
           }))
       };
     }
@@ -496,7 +642,7 @@
 
     function mergeLibraries(previousLibrary, incomingLibrary) {
       if (!previousLibrary?.webtoons?.length) {
-        return incomingLibrary;
+        return sortLibrary(incomingLibrary);
       }
 
       const merged = {
@@ -506,6 +652,7 @@
         webtoons: previousLibrary.webtoons.map((webtoon) => ({
           ...webtoon,
           key: webtoon.key || getWebtoonKey(webtoon.name, webtoon.episodes),
+          category: webtoon.category || null,
           episodes: webtoon.episodes.map((episode) => ({
             ...episode,
             cuts: episode.cuts.map((cut) => ({ ...cut }))
@@ -515,6 +662,7 @@
 
       for (const incomingWebtoon of incomingLibrary.webtoons) {
         incomingWebtoon.key = incomingWebtoon.key || getWebtoonKey(incomingWebtoon.name, incomingWebtoon.episodes);
+        incomingWebtoon.category = incomingWebtoon.category || null;
         let targetWebtoon = merged.webtoons.find((webtoon) => (
           (webtoon.key || webtoon.name) === (incomingWebtoon.key || incomingWebtoon.name)
         ));
@@ -539,11 +687,11 @@
           targetEpisode.cuts.sort((a, b) => naturalCompare(a.name, b.name));
         }
 
-        targetWebtoon.episodes.sort((a, b) => naturalCompare(a.name, b.name));
+        targetWebtoon.category = targetWebtoon.category || incomingWebtoon.category || null;
+        targetWebtoon.episodes.sort(compareEpisodes);
       }
 
-      merged.webtoons.sort((a, b) => naturalCompare(a.name, b.name));
-      return merged;
+      return sortLibrary(merged);
     }
 
     function waitForTransaction(tx) {
@@ -609,7 +757,7 @@
         }
       }
 
-      const library = mergeLibraries(previousLibrary, incomingLibrary);
+      const library = sortLibrary(mergeLibraries(previousLibrary, incomingLibrary));
 
       if (navigator.storage?.persist) {
         navigator.storage.persist().catch(() => {});
@@ -617,7 +765,7 @@
 
       if (!records.length) {
         await putValue("meta", { id: "library", ...library });
-        state.library = library;
+        state.library = sortLibrary(library);
         state.currentWebtoonIndex = Math.min(Math.max(state.currentWebtoonIndex, 0), library.webtoons.length - 1);
         state.currentEpisodeIndex = -1;
         localStorage.setItem("lastWebtoonIndex", String(state.currentWebtoonIndex));
@@ -652,7 +800,7 @@
       }
 
       await putValue("meta", { id: "library", ...library });
-      state.library = library;
+      state.library = sortLibrary(library);
       state.currentWebtoonIndex = 0;
       state.currentEpisodeIndex = -1;
       localStorage.setItem("lastWebtoonIndex", "0");
@@ -821,7 +969,29 @@
         return;
       }
 
+      const hasCategories = state.library.webtoons.some((webtoon) => webtoon.category);
+      const groupBoxes = new Map();
+
+      function getGroupBox(category) {
+        if (!category) {
+          return els.webtoonList;
+        }
+
+        if (!groupBoxes.has(category)) {
+          const title = document.createElement("div");
+          title.className = "group-title";
+          title.textContent = category;
+          const box = document.createElement("div");
+          box.className = "group-box";
+          els.webtoonList.appendChild(title);
+          els.webtoonList.appendChild(box);
+          groupBoxes.set(category, box);
+        }
+        return groupBoxes.get(category);
+      }
+
       state.library.webtoons.forEach((webtoon, index) => {
+        const category = webtoon.category || (hasCategories ? "기타" : null);
         const row = document.createElement("button");
         row.className = `row${index === state.currentWebtoonIndex ? " active" : ""}`;
         row.type = "button";
@@ -846,7 +1016,7 @@
           updateNavButtons();
           renderLists();
         });
-        els.webtoonList.appendChild(row);
+        getGroupBox(category).appendChild(row);
       });
 
       const webtoon = getCurrentWebtoon();
@@ -915,7 +1085,7 @@
         state.currentWebtoonIndex = -1;
         localStorage.removeItem("lastWebtoonIndex");
         await clearStore("meta");
-        els.mainTitle.textContent = "웹툰 뷰어";
+        els.mainTitle.textContent = "웹툰 및 만화 뷰어";
         els.subTitle.textContent = "iPhone 폴더를 가져오세요";
         els.viewer.innerHTML = '<div class="empty">가져오기를 눌러 iPhone의 웹툰 폴더를 선택하세요.</div>';
       }
@@ -1096,7 +1266,7 @@
 
     async function boot() {
       state.db = await openDb();
-      state.library = await getValue("meta", "library");
+      state.library = sortLibrary(await getValue("meta", "library"));
       if (state.library?.webtoons?.length) {
         const savedWebtoon = Number(localStorage.getItem("lastWebtoonIndex") || "0");
         state.currentWebtoonIndex = Math.min(Math.max(savedWebtoon, 0), state.library.webtoons.length - 1);

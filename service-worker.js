@@ -1,4 +1,4 @@
-const CACHE_NAME = "webtoon-offline-viewer-v13";
+const CACHE_NAME = "webtoon-offline-viewer-v16";
 const APP_SHELL = [
   "./",
   "./index.html",
