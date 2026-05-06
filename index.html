@@ -63,8 +63,10 @@
     }
 
     .app-header {
-      position: sticky;
+      position: fixed;
       top: 0;
+      left: 0;
+      right: 0;
       z-index: 20;
       display: grid;
       grid-template-columns: auto 1fr auto;
@@ -75,6 +77,13 @@
       background: rgba(18, 18, 18, 0.96);
       border-bottom: 1px solid var(--line);
       backdrop-filter: blur(14px);
+      transition: transform 160ms ease, opacity 160ms ease;
+    }
+
+    .app-header.controls-hidden {
+      transform: translateY(-100%);
+      opacity: 0;
+      pointer-events: none;
     }
 
     .title {
@@ -109,6 +118,47 @@
 
     .library-panel.open {
       display: block;
+    }
+
+    .episode-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 35;
+      padding: calc(72px + var(--safe-top)) 12px calc(24px + var(--safe-bottom));
+      background: rgba(0, 0, 0, 0.56);
+      overflow: auto;
+      backdrop-filter: blur(6px);
+    }
+
+    .episode-overlay.open {
+      display: block;
+    }
+
+    .episode-sheet {
+      width: min(100%, 430px);
+      margin: 0 auto;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 8px;
+      background: rgba(28, 28, 28, 0.82);
+      padding: 12px;
+    }
+
+    .episode-sheet .panel-head {
+      margin-bottom: 10px;
+    }
+
+    .episode-sheet h1 {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .episode-empty {
+      padding: 24px 12px;
+      color: var(--muted);
+      text-align: center;
     }
 
     .panel-head {
@@ -217,7 +267,7 @@
 
     .viewer {
       width: 100%;
-      min-height: calc(100vh - 56px - var(--safe-top));
+      min-height: 100vh;
       background: #0f0f0f;
       touch-action: manipulation;
       -webkit-user-select: none;
@@ -227,7 +277,7 @@
     .empty {
       display: grid;
       place-items: center;
-      min-height: calc(100vh - 56px - var(--safe-top));
+      min-height: 100vh;
       padding: 32px 22px;
       color: var(--muted);
       text-align: center;
@@ -237,7 +287,7 @@
     .image-strip {
       width: 100%;
       max-width: 430px;
-      min-height: calc(100vh - 56px - var(--safe-top));
+      min-height: 100vh;
       margin: 0 auto;
       background: #1a1a1a;
       touch-action: manipulation;
@@ -264,11 +314,6 @@
       transform: translateX(-50%);
       grid-template-columns: auto auto auto;
       gap: 8px;
-      padding: 8px;
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      background: rgba(28, 28, 28, 0.96);
-      box-shadow: 0 12px 36px rgba(0, 0, 0, 0.35);
       touch-action: manipulation;
       -webkit-user-select: none;
       user-select: none;
@@ -342,6 +387,16 @@
     <div id="episodeList" class="list"></div>
   </aside>
 
+  <aside id="episodeOverlay" class="episode-overlay" aria-label="회차">
+    <section class="episode-sheet">
+      <div class="panel-head">
+        <h1 id="episodeOverlayTitle">회차</h1>
+        <button id="closeEpisodeOverlayButton" type="button">닫기</button>
+      </div>
+      <div id="episodeOverlayList" class="list"></div>
+    </section>
+  </aside>
+
   <main id="viewer" class="viewer">
     <div class="empty">가져오기를 눌러 iPhone의 웹툰 폴더를 선택하세요.</div>
   </main>
@@ -373,6 +428,7 @@
     };
 
     const els = {
+      appHeader: document.querySelector(".app-header"),
       libraryButton: document.getElementById("libraryButton"),
       loadButton: document.getElementById("loadButton"),
       closePanelButton: document.getElementById("closePanelButton"),
@@ -382,6 +438,10 @@
       loadStatus: document.getElementById("loadStatus"),
       webtoonList: document.getElementById("webtoonList"),
       episodeList: document.getElementById("episodeList"),
+      episodeOverlay: document.getElementById("episodeOverlay"),
+      episodeOverlayTitle: document.getElementById("episodeOverlayTitle"),
+      episodeOverlayList: document.getElementById("episodeOverlayList"),
+      closeEpisodeOverlayButton: document.getElementById("closeEpisodeOverlayButton"),
       mainTitle: document.getElementById("mainTitle"),
       subTitle: document.getElementById("subTitle"),
       viewer: document.getElementById("viewer"),
@@ -1067,6 +1127,32 @@
       });
     }
 
+    function renderEpisodeOverlayList() {
+      els.episodeOverlayList.innerHTML = "";
+      const webtoon = getCurrentWebtoon();
+      if (!webtoon) {
+        els.episodeOverlayTitle.textContent = "회차";
+        els.episodeOverlayList.innerHTML = '<div class="episode-empty">선택된 작품이 없습니다.</div>';
+        return;
+      }
+
+      els.episodeOverlayTitle.textContent = `${webtoon.name} 회차`;
+      webtoon.episodes.forEach((episode, index) => {
+        const row = document.createElement("button");
+        row.className = `row${index === state.currentEpisodeIndex ? " active" : ""}`;
+        row.type = "button";
+        if (index === state.currentEpisodeIndex) {
+          row.setAttribute("aria-current", "true");
+        }
+        row.innerHTML = `<span class="row-name">${escapeHtml(episode.name)}</span>`;
+        row.addEventListener("click", () => {
+          closeEpisodeOverlay();
+          openEpisode(state.currentWebtoonIndex, index, true);
+        });
+        els.episodeOverlayList.appendChild(row);
+      });
+    }
+
     async function deleteCurrentWebtoon() {
       const webtoon = getCurrentWebtoon();
       if (!state.library || !webtoon) {
@@ -1220,6 +1306,7 @@
 
     function showControls(autoHide = true) {
       els.bottomControls.classList.add("open");
+      els.appHeader.classList.remove("controls-hidden");
       clearTimeout(state.controlsTimer);
       if (autoHide) {
         state.controlsTimer = setTimeout(hideControls, 3500);
@@ -1228,6 +1315,9 @@
 
     function hideControls() {
       els.bottomControls.classList.remove("open");
+      if (getCurrentEpisode() && !els.libraryPanel.classList.contains("open") && !els.episodeOverlay.classList.contains("open")) {
+        els.appHeader.classList.add("controls-hidden");
+      }
       clearTimeout(state.controlsTimer);
     }
 
@@ -1243,12 +1333,37 @@
     }
 
     function openLibrary() {
+      closeEpisodeOverlay();
+      els.appHeader.classList.remove("controls-hidden");
       els.libraryPanel.classList.add("open");
       els.libraryPanel.scrollTop = 0;
     }
 
     function closeLibrary() {
       els.libraryPanel.classList.remove("open");
+      if (getCurrentEpisode() && !els.bottomControls.classList.contains("open")) {
+        els.appHeader.classList.add("controls-hidden");
+      }
+    }
+
+    function openEpisodeOverlay() {
+      if (!getCurrentWebtoon()) {
+        showToast("작품을 먼저 선택하세요.");
+        return;
+      }
+      closeLibrary();
+      clearTimeout(state.controlsTimer);
+      renderEpisodeOverlayList();
+      els.appHeader.classList.remove("controls-hidden");
+      els.episodeOverlay.classList.add("open");
+      els.episodeOverlay.scrollTop = 0;
+    }
+
+    function closeEpisodeOverlay() {
+      els.episodeOverlay.classList.remove("open");
+      if (getCurrentEpisode() && !els.bottomControls.classList.contains("open")) {
+        els.appHeader.classList.add("controls-hidden");
+      }
     }
 
     function showToast(message) {
@@ -1307,13 +1422,19 @@
       els.libraryButton.addEventListener("click", openLibrary);
       els.loadButton.addEventListener("click", () => els.folderInput.click());
       els.closePanelButton.addEventListener("click", closeLibrary);
+      els.closeEpisodeOverlayButton.addEventListener("click", closeEpisodeOverlay);
+      els.episodeOverlay.addEventListener("click", (event) => {
+        if (event.target === els.episodeOverlay) {
+          closeEpisodeOverlay();
+        }
+      });
       els.deleteWebtoonButton.addEventListener("click", () => {
         deleteCurrentWebtoon().catch((error) => {
           console.error(error);
           showToast("작품 삭제에 실패했습니다.");
         });
       });
-      bindTouchButton(els.episodesButton, openLibrary);
+      bindTouchButton(els.episodesButton, openEpisodeOverlay);
       bindTouchButton(els.prevButton, prevEpisode);
       bindTouchButton(els.nextButton, nextEpisode);
       els.folderInput.addEventListener("change", (event) => {
