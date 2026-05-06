@@ -127,7 +127,6 @@
       z-index: 35;
       padding: calc(72px + var(--safe-top)) 12px calc(24px + var(--safe-bottom));
       background: rgba(0, 0, 0, 0.56);
-      overflow: auto;
       backdrop-filter: blur(6px);
     }
 
@@ -137,17 +136,19 @@
 
     .episode-sheet {
       width: min(100%, 430px);
+      max-height: calc(100vh - 96px - var(--safe-top) - var(--safe-bottom));
       margin: 0 auto;
       border: 1px solid rgba(255, 255, 255, 0.14);
       border-radius: 8px;
       background: rgba(28, 28, 28, 0.82);
       padding: 12px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
     }
 
     .episode-sheet .panel-head {
-      position: sticky;
-      top: 0;
-      z-index: 1;
+      flex: 0 0 auto;
       margin-bottom: 10px;
       padding-bottom: 10px;
       background: rgba(28, 28, 28, 0.94);
@@ -164,6 +165,13 @@
       padding: 24px 12px;
       color: var(--muted);
       text-align: center;
+    }
+
+    .episode-list {
+      min-height: 0;
+      overflow: auto;
+      padding: 2px;
+      overscroll-behavior: contain;
     }
 
     .panel-head {
@@ -319,6 +327,11 @@
       transform: translateX(-50%);
       grid-template-columns: auto auto auto;
       gap: 8px;
+      padding: 8px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(28, 28, 28, 0.96);
+      box-shadow: 0 12px 36px rgba(0, 0, 0, 0.35);
       touch-action: manipulation;
       -webkit-user-select: none;
       user-select: none;
@@ -398,7 +411,7 @@
         <h1 id="episodeOverlayTitle">회차</h1>
         <button id="closeEpisodeOverlayButton" type="button">닫기</button>
       </div>
-      <div id="episodeOverlayList" class="list"></div>
+      <div id="episodeOverlayList" class="list episode-list"></div>
     </section>
   </aside>
 
@@ -1141,7 +1154,7 @@
         return;
       }
 
-      els.episodeOverlayTitle.textContent = `${webtoon.name} 의 회차`;
+      els.episodeOverlayTitle.textContent = `${webtoon.name}의 회차`;
       webtoon.episodes.forEach((episode, index) => {
         const row = document.createElement("button");
         row.className = `row${index === state.currentEpisodeIndex ? " active" : ""}`;
