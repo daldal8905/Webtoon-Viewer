@@ -37,6 +37,7 @@
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       touch-action: manipulation;
       -webkit-text-size-adjust: 100%;
+      -webkit-touch-callout: none;
     }
 
     body {
@@ -125,19 +126,21 @@
       position: fixed;
       inset: 0;
       z-index: 35;
-      padding: calc(72px + var(--safe-top)) 12px calc(24px + var(--safe-bottom));
+      align-items: center;
+      justify-items: center;
+      padding: calc(24px + var(--safe-top)) 12px calc(24px + var(--safe-bottom));
       background: rgba(0, 0, 0, 0.56);
       backdrop-filter: blur(6px);
     }
 
     .episode-overlay.open {
-      display: block;
+      display: grid;
     }
 
     .episode-sheet {
       width: min(100%, 430px);
-      max-height: calc(100vh - 96px - var(--safe-top) - var(--safe-bottom));
-      margin: 0 auto;
+      max-height: calc(100dvh - 48px - var(--safe-top) - var(--safe-bottom));
+      margin: 0;
       border: 1px solid rgba(255, 255, 255, 0.14);
       border-radius: 8px;
       background: rgba(28, 28, 28, 0.82);
@@ -293,6 +296,7 @@
       min-height: 100vh;
       background: #0f0f0f;
       touch-action: manipulation;
+      -webkit-touch-callout: none;
       -webkit-user-select: none;
       user-select: none;
     }
@@ -314,6 +318,7 @@
       margin: 0 auto;
       background: #1a1a1a;
       touch-action: manipulation;
+      -webkit-touch-callout: none;
     }
 
     .cut {
@@ -323,6 +328,8 @@
       margin: 0;
       background: #202020;
       touch-action: manipulation;
+      pointer-events: none;
+      -webkit-touch-callout: none;
       -webkit-user-select: none;
       user-select: none;
       -webkit-user-drag: none;
@@ -1285,6 +1292,7 @@
         img.className = "cut";
         img.alt = cut.name;
         img.loading = "eager";
+        img.draggable = false;
         img.src = url;
         strip.appendChild(img);
       }
@@ -1474,6 +1482,9 @@
 
       els.viewer.addEventListener("click", () => {
         toggleControls();
+      });
+      els.viewer.addEventListener("contextmenu", (event) => {
+        event.preventDefault();
       });
       els.viewer.addEventListener("dblclick", (event) => {
         event.preventDefault();
